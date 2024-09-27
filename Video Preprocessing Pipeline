@@ -1,0 +1,184 @@
+# Frame Extraction
+
+import torch
+from torch.utils.data import Dataset, DataLoader
+import cv2
+import numpy as np
+import os
+
+class VideoDataset(Dataset):
+    def __init__(self, video_files, transform=None, max_frames=300, frame_size=(224, 224)):
+        self.video_files = video_files
+        self.transform = transform
+        self.max_frames = max_frames
+        self.frame_size = frame_size
+
+    def __len__(self):
+        return len(self.video_files)
+
+    def __getitem__(self, idx):
+        video_file = self.video_files[idx]
+        cap = cv2.VideoCapture(video_file)
+        frames = []
+
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame = cv2.resize(frame, self.frame_size)
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            if self.transform:
+                frame = self.transform(frame)
+            else:
+                frame = torch.tensor(frame).permute(2, 0, 1) / 255.0
+            frames.append(frame)
+            if len(frames) >= self.max_frames:
+                break
+
+        cap.release()
+
+        # Zero-padding to the frames
+        if len(frames) == 0:
+            frames = [torch.zeros(3, self.frame_size[0], self.frame_size[1])] * self.max_frames
+        elif len(frames) < self.max_frames:
+            pad_frames = self.max_frames - len(frames)
+            frames.extend([torch.zeros_like(frames[0])] * pad_frames)
+
+        frames = torch.stack(frames, dim=0)
+
+        return frames, video_file
+
+# Define a simple transform to normalize the frames 
+transform = lambda x: torch.tensor(x).permute(2, 0, 1) / 255.0
+
+# List of video files
+video_files_path = "/content/training_set"
+video_files = [os.path.join(video_files_path, f) for f in os.listdir(video_files_path) if f.endswith('.mp4')]
+
+# Create the dataset and dataloader
+video_dataset = VideoDataset(video_files, transform=transform)
+video_loader = DataLoader(video_dataset, batch_size=1, shuffle=False)
+
+# Loop to show the shapes of the extracted frames
+for i, (frames, video_file) in enumerate(video_loader):
+    print(f"Video file: {video_file[0]}")
+    print(f"Shape of frames tensor: {frames.shape}")
+
+    # Break after the first video for demonstration purposes
+    break
+
+
+
+## Face detection, alignment and normalization
+
+import cv2
+import dlib
+import numpy as np
+import os
+from multiprocessing import Pool, cpu_count
+from tqdm import tqdm  # Import tqdm for progress bar
+
+# Initialize dlib's face detector (HOG-based) and create the facial landmark predictor
+detector = dlib.get_frontal_face_detector()
+
+# Download the pre-trained model 
+!wget http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2
+!bzip2 -dk shape_predictor_68_face_landmarks.dat.bz2
+
+# Specify the correct path to the .dat file
+predictor_path = "./shape_predictor_68_face_landmarks.dat"  
+predictor = dlib.shape_predictor(predictor_path)
+
+def align_face(image, landmarks, frame_size=(224, 224)):
+    # Extract left and right eye coordinates from landmarks
+    left_eye = landmarks[36:42]  # Landmarks 36-41 correspond to the left eye
+    right_eye = landmarks[42:48] # Landmarks 42-47 correspond to the right eye
+
+    # Calculate the center of the eyes
+    left_eye_center = np.mean(left_eye, axis=0).astype(int)
+    right_eye_center = np.mean(right_eye, axis=0).astype(int)
+
+    # Get the center of the eyes
+    eyes_center = ((left_eye_center[0] + right_eye_center[0]) // 2,
+                   (left_eye_center[1] + right_eye_center[1]) // 2)
+
+    # Convert eyes_center to a tuple of floats
+    eyes_center = (float(eyes_center[0]), float(eyes_center[1]))
+
+    # Define the angle of rotation (in degrees) and scale
+    angle = 0.0  # You can adjust this value based on your needs
+    scale = 1.0
+
+    # Get the rotation matrix for the alignment
+    M = cv2.getRotationMatrix2D(eyes_center, angle, scale)
+
+    # Update the translation component of the matrix
+    tX = frame_size[0] * 0.5
+    tY = frame_size[1] * 0.35
+    M[0, 2] += (tX - eyes_center[0])
+    M[1, 2] += (tY - eyes_center[1])
+
+    # Apply the transformation
+    (w, h) = frame_size
+    aligned_face = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_CUBIC)
+
+    return aligned_face
+
+def process_single_video(video_info):
+    video_path, output_folder, frame_size = video_info
+    cap = cv2.VideoCapture(video_path)
+    frame_count = 0
+
+    # Get the total number of frames for progress bar
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    progress_bar = tqdm(total=total_frames, desc=f"Processing {os.path.basename(video_path)}", position=0, leave=True)
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # Convert to grayscale for face detection
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        # Detect faces
+        faces = detector(gray)
+        for face in faces:
+            # Predict facial landmarks
+            landmarks = predictor(gray, face)
+
+            # Convert the facial landmarks to a NumPy array
+            landmarks_np = np.array([(p.x, p.y) for p in landmarks.parts()])
+
+            # Align the face using the eyes' coordinates
+            aligned_face = align_face(frame, landmarks_np, frame_size)
+
+            # Save the aligned face
+            output_image_path = os.path.join(output_folder, f"{os.path.splitext(os.path.basename(video_path))[0]}_frame{frame_count}.jpg")
+            cv2.imwrite(output_image_path, aligned_face)
+            frame_count += 1
+
+        # Update the progress bar
+        progress_bar.update(1)
+
+    cap.release()
+    progress_bar.close()
+    print(f"Processed video: {os.path.basename(video_path)}")
+
+def process_videos(video_folder, output_folder, frame_size=(224, 224)):
+    os.makedirs(output_folder, exist_ok=True)
+
+    # Gather all video files
+    video_files = [(os.path.join(video_folder, file_name), output_folder, frame_size)
+                   for file_name in os.listdir(video_folder) if file_name.endswith('.mp4')]
+
+    # Use multiprocessing to process videos in parallel
+    with Pool(processes=cpu_count()) as pool:
+        pool.map(process_single_video, video_files)
+
+# Folder Paths
+video_folder = "/content/training_set"
+output_folder = "/content/Preprocessing/detected_faces"
+
+process_videos(video_folder, output_folder)
+
