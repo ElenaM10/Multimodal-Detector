@@ -6,6 +6,8 @@ The model architectures and training scripts are available here.
 Preprocessing:
   - Audio Preprocessing Pipeline (Multimodal Detector)
   - Video Preprocessing Outline (Multi and Unimodal Detector)
+
+    
 Architectures:
   - Audio Spectrogram Architecture (Multimodal Detector)
   - CNN Model (Unimodal Detector)
