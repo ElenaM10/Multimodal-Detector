@@ -3,8 +3,8 @@
 import os
 from moviepy.editor import VideoFileClip
 
-# Define the path to the folder containing the MP4 files
-folder_path = '/content/training_set'  # Replace with your folder path
+# Paths
+folder_path = '/content/training_set'  
 output_folder = '/content/Preprocessing/extracted_audio' 
 
 # Create the output folder 
