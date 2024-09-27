@@ -76,7 +76,7 @@ import dlib
 import numpy as np
 import os
 from multiprocessing import Pool, cpu_count
-from tqdm import tqdm  # Import tqdm for progress bar
+from tqdm import tqdm 
 
 # Initialize dlib's face detector (HOG-based) and create the facial landmark predictor
 detector = dlib.get_frontal_face_detector()
@@ -176,7 +176,7 @@ def process_videos(video_folder, output_folder, frame_size=(224, 224)):
     with Pool(processes=cpu_count()) as pool:
         pool.map(process_single_video, video_files)
 
-# Folder Paths
+# Paths
 video_folder = "/content/training_set"
 output_folder = "/content/Preprocessing/detected_faces"
 
