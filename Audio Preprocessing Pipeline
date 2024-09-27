@@ -1,0 +1,67 @@
+## Convert .mp4 to .wav
+
+import os
+from moviepy.editor import VideoFileClip
+
+# Define the path to the folder containing the MP4 files
+folder_path = '/content/training_set'  # Replace with your folder path
+output_folder = '/content/Preprocessing/extracted_audio' 
+
+# Create the output folder 
+os.makedirs(output_folder, exist_ok=True)
+
+# Loop through all files in the folder
+for filename in os.listdir(folder_path):
+    if filename.endswith('.mp4'):
+        # Load the video file
+        video_path = os.path.join(folder_path, filename)
+        video = VideoFileClip(video_path)
+
+        # Extract  and save it as .wav
+        audio_path = os.path.join(output_folder, f'{os.path.splitext(filename)[0]}.wav')
+        video.audio.write_audiofile(audio_path, codec='pcm_s16le')
+
+        print(f'Converted {filename} to WAV and saved to {audio_path}')
+
+## Extracting MFCCs, visualise spectograms, represent chroma features,and analysing pitch and energy
+
+import librosa
+import numpy as np
+import os
+
+# Path to audio folder 
+audio_folder = '/content/Preprocessing/extracted_audio'
+
+# Loop through each audio file and extract features
+for file_name in os.listdir(audio_folder):
+    if file_name.endswith('.wav'):
+        file_path = os.path.join(audio_folder, file_name)
+
+        # Load the audio file
+        y, sr = librosa.load(file_path, sr=None)
+
+        # Extract MFCCs
+        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+        mfccs_mean = np.mean(mfccs, axis=1)
+
+        # Extract Spectrogram
+        spectrogram = librosa.feature.melspectrogram(y=y, sr=sr)
+        log_spectrogram = librosa.power_to_db(spectrogram)
+
+        # Extract Chroma Features
+        chroma = librosa.feature.chroma_stft(y=y, sr=sr)
+        chroma_mean = np.mean(chroma, axis=1)
+
+        # Extract Pitch and Energy
+        pitches, magnitudes = librosa.piptrack(y=y, sr=sr)
+        pitch = pitches[magnitudes > np.median(magnitudes)]
+        pitch_mean = np.mean(pitch)
+        energy = np.mean(librosa.feature.rms(y=y))
+
+        print(f"Features for {file_name}:")
+        print(f"MFCCs mean: {mfccs_mean}")
+        print(f"Spectrogram shape: {log_spectrogram.shape}")
+        print(f"Chroma mean: {chroma_mean}")
+        print(f"Pitch mean: {pitch_mean}")
+        print(f"Energy: {energy}")
+
