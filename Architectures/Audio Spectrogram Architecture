@@ -42,7 +42,6 @@ class AudioDataset(Dataset):
             # Apply any transformations
             if self.transform:
                 waveform = self.transform(waveform)
-
             return waveform, label
 
         except (FileNotFoundError, Exception) as e:
