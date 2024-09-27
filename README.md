@@ -3,7 +3,11 @@ This project explores the efficiency of a Multimodal Deepfake Detector (Video + 
 The DFDC dataset was used to train, validate and test both models.
 The model architectures and training scripts are available here.
 
-Models:
-  - Unimodal
-Scripts:
-  - 
+Preprocessing:
+  - Audio Preprocessing Pipeline (Multimodal Detector)
+  - Video Preprocessing Outline (Multi and Unimodal Detector)
+Architectures:
+  - Audio Spectrogram Architecture (Multimodal Detector)
+  - CNN Model (Unimodal Detector)
+  - Joint Training (Multimodal Detector)
+  - Vision Transformer Architecture (Multimodal Detector)
